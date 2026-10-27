@@ -17,7 +17,7 @@ Little Mushroom · AI Builder Academy 是面向个人职业转型的本地优先
 
 ## 数据模型与存储
 
-`src/domain/types.ts` 定义课程、学习状态、掌握度、打卡、练习记录及偏好模型；`src/storage/db.ts` 集中管理 IndexedDB（数据库 `little-mushroom-academy`，版本 2，含 courses、progress、checkins、preferences、exercises stores）。升级通过版本号和 `upgrade` 回调完成，版本 1 的既有记录保留。学习状态与掌握度独立保存；浏览器本地数据可能因用户清理或设备变化而丢失；JSON 备份导入导出留待后续阶段。不得在浏览器存储或源码保存 API Key。
+`src/domain/types.ts` 定义课程、学习状态、掌握度、打卡、练习、高亮及偏好模型；`src/storage/db.ts` 集中管理 IndexedDB（数据库 `little-mushroom-academy`，版本 3，含 courses、progress、checkins、preferences、exercises、highlights stores）。升级只为缺失的 store 建结构，不删除已有 store 或记录。高亮以课程 ID、稳定段落 ID、原段落全文、选区文本与字符偏移定位；正文变化或定位校验失败时跳过显示并保留原记录。学习状态、掌握度与正文高亮独立保存；浏览器本地数据可能因用户清理或设备变化而丢失；JSON 备份导入导出留待后续阶段。不得在浏览器存储或源码保存 API Key。
 
 ## GitHub Pages
 
