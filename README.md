@@ -1,14 +1,23 @@
 # 小蘑菇AI Builder 研究院
 
-Little Mushroom · AI Builder Academy 是面向个人职业转型的本地优先 AI 学习平台。当前交付 Phase 1 框架：课程地图、学习状态、打卡日历、主题切换和 IndexedDB 存储。28 个单元均标记为计划中，不包含占位课程正文。
+Little Mushroom · AI Builder Academy 是面向个人职业转型的本地优先 AI 学习平台。当前包含 Phase 1 基础框架，以及已发布的 U01–U04 正式课程、交互实验和本地评测。U05–U28 保持计划中，不含占位正文。
 
 ## 本地运行
 
 需要 Node.js 20 或兼容的 npm。执行 `npm ci`、`npm run dev` 启动开发服务器；执行 `npm test`、`npm run typecheck`、`npm run build` 验证。锁文件使用 npm `package-lock.json`，`.npmrc` 固定了与该锁文件一致的 peer dependency 解析策略。
 
+## 已发布课程
+
+- U01：LLM 基础与 AI 应用架构（BI 助手架构搭建实验）
+- U02：Token 与上下文窗口（明确标注估算的预算模拟器）
+- U03：Prompt 设计与版本对比（明确标注预设样本的对比实验）
+- U04：生成参数与输出控制（固定玩具概率分布的可重复采样模拟）
+
+实验均在浏览器本地运行，不调用远程 AI 服务。客观题按选项自动判分；场景题由学习者作答并按 Rubric 自评，不做关键词语义评分。学习完成状态和知识掌握度分开保存；自评或阅读不会自动通过能力验收。课程内容审核记录见 [U01–U04 内容审计](docs/curriculum-audit-u01-u04.md)。
+
 ## 数据模型与存储
 
-`src/domain/types.ts` 定义课程、学习状态、掌握度、打卡及偏好模型；`src/storage/db.ts` 集中管理 IndexedDB（数据库 `little-mushroom-academy`，版本 1，含 courses、progress、checkins、preferences stores）。学习状态与掌握度独立保存；数据库升级通过版本号和 `upgrade` 回调完成。浏览器本地数据可能因用户清理或设备变化而丢失；JSON 备份导入导出留待后续阶段。不得在浏览器存储或源码保存 API Key。
+`src/domain/types.ts` 定义课程、学习状态、掌握度、打卡、练习记录及偏好模型；`src/storage/db.ts` 集中管理 IndexedDB（数据库 `little-mushroom-academy`，版本 2，含 courses、progress、checkins、preferences、exercises stores）。升级通过版本号和 `upgrade` 回调完成，版本 1 的既有记录保留。学习状态与掌握度独立保存；浏览器本地数据可能因用户清理或设备变化而丢失；JSON 备份导入导出留待后续阶段。不得在浏览器存储或源码保存 API Key。
 
 ## GitHub Pages
 
@@ -32,4 +41,4 @@ Little Mushroom · AI Builder Academy 是面向个人职业转型的本地优先
 
 ## 后续阶段
 
-课程批次按 U01–U04、U05–U08、U09–U12、U13–U16、U17–U20、U21–U24、U25–U28 独立审核、测试、构建并提交。本阶段未生成课程正文、实验、练习或答案解析。
+课程批次按 U05–U08、U09–U12、U13–U16、U17–U20、U21–U24、U25–U28 独立审核、测试、构建并提交。
