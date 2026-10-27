@@ -1,0 +1,20 @@
+import { describe,it,expect } from 'vitest';
+import { cleanup,fireEvent,render,screen } from '@testing-library/react';
+import { afterEach } from 'vitest';
+import 'fake-indexeddb/auto';
+import { addDays,checkinStats,localDateKey,summarizeProgress,transitionLearningStatus } from '../domain/learning';
+import { addCheckin,getAll,saveProgress } from '../storage/db';
+import { allUnits } from '../data/courses';
+import App from '../app/App';
+afterEach(()=>cleanup());
+describe('learning and check-in logic',()=>{
+ it('counts completion only among released units',()=>{const units=[{...allUnits[0],releaseStatus:'published' as const},{...allUnits[1],releaseStatus:'published' as const},...allUnits.slice(2)];const progress=[{unitId:'U01',learningStatus:'completed' as const,masteryStatus:'unassessed' as const,updatedAt:'now'},{unitId:'U02',learningStatus:'in_progress' as const,masteryStatus:'needs_review' as const,updatedAt:'now'},{unitId:'U03',learningStatus:'completed' as const,masteryStatus:'unassessed' as const,updatedAt:'now'}];expect(summarizeProgress(units,progress)).toMatchObject({publishedCount:2,completedCount:1,inProgressCount:1,percent:50})});
+ it('transitions learning states without conflating mastery',()=>{expect(transitionLearningStatus('not_started','in_progress')).toBe('in_progress');expect(transitionLearningStatus('in_progress','completed')).toBe('completed');expect(transitionLearningStatus('completed','in_progress')).toBe('in_progress')});
+ it('deduplicates same-day check-ins',async()=>{expect(await addCheckin('2026-10-27')).toBe(true);expect(await addCheckin('2026-10-27')).toBe(false)});
+ it('computes streak and total unique days',()=>expect(checkinStats([{date:'2026-10-25'},{date:'2026-10-26'},{date:'2026-10-26'},{date:'2026-10-27'}],'2026-10-27')).toMatchObject({total:3,streak:3}));
+ it('uses local dates around midnight and crosses month and year boundaries',()=>{expect(localDateKey(new Date(2026,0,1,23,59))).toBe('2026-01-01');expect(localDateKey(new Date(2026,0,2,0,1))).toBe('2026-01-02');expect(addDays('2026-03-08',1)).toBe('2026-03-09');expect(addDays('2026-01-01',-1)).toBe('2025-12-31')});
+ it('persists progress in IndexedDB',async()=>{await saveProgress({unitId:'U01',learningStatus:'in_progress',masteryStatus:'unassessed',updatedAt:'now'});expect((await getAll('progress'))[0].unitId).toBe('U01')});
+ it('surfaces unavailable database errors',async()=>{const old=globalThis.indexedDB;Object.defineProperty(globalThis,'indexedDB',{value:undefined,configurable:true});await expect(getAll('progress')).rejects.toThrow('不支持 IndexedDB');Object.defineProperty(globalThis,'indexedDB',{value:old,configurable:true})});
+ it('defines exactly 28 planned units across five modules',()=>{expect(allUnits).toHaveLength(28);expect(new Set(allUnits.map(u=>u.moduleId)).size).toBe(5);expect(allUnits.every(u=>u.releaseStatus==='planned')).toBe(true)});
+ it('navigates with hash routes and shows the course map',async()=>{window.location.hash='#/';render(<App/>);fireEvent.click(screen.getAllByRole('link',{name:/课程地图/})[0]);expect(window.location.hash).toBe('#/courses');expect(await screen.findByRole('heading',{name:'课程地图'})).toBeInTheDocument();expect(screen.getAllByText('计划中').length).toBeGreaterThan(0)});
+});
