@@ -25,6 +25,7 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   const presentation = lessonPresentation[id];
   const current = a.progress.find(item => item.unitId === id);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [exerciseLoadedFor, setExerciseLoadedFor] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [scenarioAnswer, setScenarioAnswer] = useState('');
   const [rubric, setRubric] = useState<Record<string, number>>({});
@@ -37,6 +38,7 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   useEffect(() => {
     if (!lesson) return;
     let active = true;
+    setExerciseLoadedFor('');
     setHighlights([]);
     setHighlightMessage('');
     setHighlightLoadError('');
@@ -54,12 +56,14 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
         setScenarioAnswer('');
         setRubric({});
       }
+      setExerciseLoadedFor(id);
     }).catch(error => {
       if (!active) return;
       const message = error instanceof Error ? error.message : '本地学习记录读取失败。';
       setHighlightLoadError(message);
       setHighlightMessage(message);
       setSaved(false);
+      setExerciseLoadedFor(id);
     });
     return () => { active = false; };
   }, [id, lesson]);
@@ -225,12 +229,13 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
     <section className="panel experiment"><div className="eyebrow">可重复实验 · 本地运行</div><h2>{id === 'U01' ? 'AI 应用架构搭建器' : id === 'U02' ? 'Token 与上下文预算模拟器' : id === 'U03' ? 'Prompt 版本对比实验室' : '采样参数可视化'}</h2>{id === 'U01' ? <ArchitectureLab/> : id === 'U02' ? <ContextLab/> : id === 'U03' ? <PromptLab/> : <SamplingLab/>}</section>
     <section className="panel">
       <h2>知识理解题</h2><p>选择后提交判分；答题结果保存到本机 IndexedDB。阅读或答题不会自动把掌握度标记为通过。</p>
-      {lesson.quiz.map((question, index) => <fieldset className="quiz-item" key={question.id}><legend>{index + 1}. {question.question}</legend>{question.choices.map((choice, choiceIndex) => <label className="choice" key={choice}><input type="radio" name={id + '-' + question.id} checked={answers[question.id] === choiceIndex} onChange={() => setAnswers(previous => ({ ...previous, [question.id]: choiceIndex }))}/>{choice}</label>)}{submitted && <div className={answers[question.id] === question.answer ? 'feedback success' : 'feedback warning'}>{answers[question.id] === question.answer ? '回答正确。' : '尚未答对。'}{question.explanation}</div>}</fieldset>)}
-      <button className="button" onClick={() => { setSubmitted(true); void persist({ quizSubmitted: true, quizScore: result.percent }); }}>提交并判分</button>{submitted && <strong className="quiz-result">得分 {result.correct}/{result.total}（{result.percent}%）</strong>}
+      {exerciseLoadedFor !== id && <p className="save-status" role="status">正在读取本机练习记录…</p>}
+      {lesson.quiz.map((question, index) => <fieldset className="quiz-item" key={question.id}><legend>{index + 1}. {question.question}</legend>{question.choices.map((choice, choiceIndex) => <label className="choice" key={choice}><input type="radio" name={id + '-' + question.id} disabled={exerciseLoadedFor !== id} checked={answers[question.id] === choiceIndex} onChange={() => setAnswers(previous => ({ ...previous, [question.id]: choiceIndex }))}/>{choice}</label>)}{submitted && <div className={answers[question.id] === question.answer ? 'feedback success' : 'feedback warning'}>{answers[question.id] === question.answer ? '回答正确。' : '尚未答对。'}{question.explanation}</div>}</fieldset>)}
+      <button className="button" disabled={exerciseLoadedFor !== id} onClick={() => { setSubmitted(true); void persist({ quizSubmitted: true, quizScore: result.percent }); }}>提交并判分</button>{submitted && <strong className="quiz-result">得分 {result.correct}/{result.total}（{result.percent}%）</strong>}
     </section>
     <section className="panel">
-      <h2>业务场景练习与自评</h2><p>{lesson.scenario.prompt}</p><label className="field">你的作答<textarea rows={7} value={scenarioAnswer} onChange={event => setScenarioAnswer(event.target.value)} placeholder="写下你的方案、依据与边界处理。"/></label><button className="button" onClick={() => void persist()}>保存作答</button>
-      <h3>Rubric 自评（每项 0–2）</h3>{lesson.scenario.rubric.map(item => <label className="rubric-row" key={item.id}><span><b>{item.label}</b><small>{item.description}</small></span><select value={rubric[item.id] ?? 0} onChange={event => { const next = { ...rubric, [item.id]: +event.target.value }; setRubric(next); void persist({ rubricScores: next }); }}><option value={0}>0 · 尚未体现</option><option value={1}>1 · 部分体现</option><option value={2}>2 · 充分体现</option></select></label>)}
+      <h2>业务场景练习与自评</h2><p>{lesson.scenario.prompt}</p><label className="field">你的作答<textarea rows={7} disabled={exerciseLoadedFor !== id} value={scenarioAnswer} onChange={event => setScenarioAnswer(event.target.value)} placeholder="写下你的方案、依据与边界处理。"/></label><button className="button" disabled={exerciseLoadedFor !== id} onClick={() => void persist()}>保存作答</button>
+      <h3>Rubric 自评（每项 0–2）</h3>{lesson.scenario.rubric.map(item => <label className="rubric-row" key={item.id}><span><b>{item.label}</b><small>{item.description}</small></span><select disabled={exerciseLoadedFor !== id} value={rubric[item.id] ?? 0} onChange={event => { const next = { ...rubric, [item.id]: +event.target.value }; setRubric(next); void persist({ rubricScores: next }); }}><option value={0}>0 · 尚未体现</option><option value={1}>1 · 部分体现</option><option value={2}>2 · 充分体现</option></select></label>)}
       <details><summary>查看参考答案与常见错误</summary><h4>参考答案</h4><p>{lesson.scenario.reference}</p><h4>常见错误</h4><ul>{lesson.scenario.commonErrors.map(item => <li key={item}>{item}</li>)}</ul></details>
       <p className="save-status" role="status">{saved ? '练习记录已保存在本机。' : '修改后请保存作答；数据仅保存在本机。'}</p>
     </section>
