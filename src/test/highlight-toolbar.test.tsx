@@ -20,9 +20,10 @@ describe('highlight toolbar pointer sequence',()=>{
   const start=joined.indexOf('大量训练数据');const end=joined.indexOf('下一个 Token 的概率分布',start)+'下一个 Token 的概率分布'.length;
   const locate=(offset:number)=>{let left=offset;for(const node of nodes){if(left<=node.length)return{node,offset:left};left-=node.length;}return{node:nodes.at(-1)!,offset:nodes.at(-1)!.length};};
   const first=locate(start),last=locate(end),range=document.createRange();range.setStart(first.node,first.offset);range.setEnd(last.node,last.offset);
-  const selection=window.getSelection()!;selection.removeAllRanges();selection.addRange(range);
-  fireEvent(document,new Event('selectionchange'));fireEvent.mouseUp(target);
+  const selection=window.getSelection()!;fireEvent.pointerDown(target,{pointerId:1});selection.removeAllRanges();selection.addRange(range);
+  fireEvent(document,new Event('selectionchange'));fireEvent.mouseUp(target);fireEvent.click(target);
   const button=await screen.findByRole('button',{name:'高亮'});
+  expect(selection.toString()).toBe(joined.slice(start,end));
   const toolbar=button.closest('.selection-popover')!;
   fireEvent.pointerEnter(toolbar);fireEvent.pointerDown(toolbar,{pointerId:1});fireEvent.mouseDown(button);selection.removeAllRanges();fireEvent(document,new Event('selectionchange'));fireEvent.mouseUp(button);fireEvent.click(button);
   await waitFor(()=>expect(storage.saveHighlight).toHaveBeenCalledTimes(1));

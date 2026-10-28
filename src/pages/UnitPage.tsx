@@ -128,7 +128,7 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
       };
       setFloating({ mode: 'add', ...position });
     };
-    const clickedOutside = (event: MouseEvent) => {
+    const pressedOutside = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('.selection-popover, .study-highlight')) return;
       toolbarPointerActive.current = false;
@@ -140,13 +140,16 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
     document.addEventListener('mouseup', selectionChanged);
     document.addEventListener('touchend', selectionChanged);
     window.addEventListener('scroll', selectionChanged, true);
-    document.addEventListener('click', clickedOutside);
+    // A drag-selection is followed by mouseup and then click on the paragraph.
+    // Dismissing on click clears that freshly-created selection before the user
+    // can move to the toolbar. Dismiss on the next pointer press instead.
+    document.addEventListener('pointerdown', pressedOutside);
     return () => {
       document.removeEventListener('selectionchange', selectionChanged);
       document.removeEventListener('mouseup', selectionChanged);
       document.removeEventListener('touchend', selectionChanged);
       window.removeEventListener('scroll', selectionChanged, true);
-      document.removeEventListener('click', clickedOutside);
+      document.removeEventListener('pointerdown', pressedOutside);
     };
   }, [id, lesson]);
 
