@@ -3,11 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UnitPage } from '../pages/UnitPage';
 
-const storage = vi.hoisted(() => ({ getExercise:vi.fn(),getHighlights:vi.fn(),saveHighlight:vi.fn(),deleteHighlight:vi.fn(),saveExercise:vi.fn() }));
+const storage = vi.hoisted(() => ({ getExercise:vi.fn(),getHighlights:vi.fn(),saveHighlight:vi.fn(),deleteHighlight:vi.fn(),saveExercise:vi.fn(),getMicroProgress:vi.fn(),updateMicroProgress:vi.fn() }));
 vi.mock('../storage/db',()=>storage);
 
 describe('highlight toolbar pointer sequence',()=>{
- beforeEach(()=>{cleanup();vi.clearAllMocks();storage.getExercise.mockResolvedValue(undefined);storage.getHighlights.mockResolvedValue([]);storage.saveHighlight.mockResolvedValue(undefined);storage.deleteHighlight.mockResolvedValue(undefined);});
+ beforeEach(()=>{cleanup();vi.clearAllMocks();storage.getExercise.mockResolvedValue(undefined);storage.getHighlights.mockResolvedValue([]);storage.saveHighlight.mockResolvedValue(undefined);storage.deleteHighlight.mockResolvedValue(undefined);storage.getMicroProgress.mockResolvedValue([]);storage.updateMicroProgress.mockImplementation(async(unitId:string,microLessonId:string,patch:Record<string,unknown>)=>({id:`${unitId}:${microLessonId}`,unitId,microLessonId,status:'in_progress',lastVisitedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),...patch}));});
  it('keeps the captured paragraph offsets when pointer selection is cleared before click',async()=>{
   Object.defineProperty(Range.prototype,'getBoundingClientRect',{configurable:true,value:()=>new DOMRect(120,180,80,18)});
   const academy={progress:[],setStatus:vi.fn(),setMastery:vi.fn()} as never;
@@ -42,10 +42,10 @@ describe('highlight toolbar pointer sequence',()=>{
   storage.saveHighlight.mockRejectedValueOnce(new Error('IndexedDB denied'));
   const academy={progress:[],setStatus:vi.fn(),setMastery:vi.fn()} as never;
   render(<MemoryRouter initialEntries={['/courses/U01']}><Routes><Route path="/courses/:id" element={<UnitPage a={academy}/>}/></Routes></MemoryRouter>);
-  await screen.findByRole('heading',{name:'LLM 如何生成文字'});
-  const target=document.querySelector<HTMLElement>('.lesson-section [data-highlight-target]')!;
+  await screen.findByRole('heading',{name:'文本如何成为数字'});
+  const target=document.querySelector<HTMLElement>('[data-highlight-target="U01:micro:token-vectors:s0:p0"]')!;
   const walker=document.createTreeWalker(target,NodeFilter.SHOW_TEXT),nodes:Text[]=[];while(walker.nextNode())nodes.push(walker.currentNode as Text);
-  const full=nodes.map(node=>node.data).join(''),start=full.indexOf('神经网络'),end=start+'神经网络'.length;
+  const full=nodes.map(node=>node.data).join(''),start=full.indexOf('Tokenizer 将文本切成'),end=start+'Tokenizer 将文本切成'.length;
   const locate=(offset:number)=>{let left=offset;for(const node of nodes){if(left<=node.length)return{node,offset:left};left-=node.length;}return{node:nodes.at(-1)!,offset:nodes.at(-1)!.length};};
   const a=locate(start),b=locate(end),range=document.createRange();range.setStart(a.node,a.offset);range.setEnd(b.node,b.offset);window.getSelection()!.addRange(range);
   fireEvent(document,new Event('selectionchange'));fireEvent.mouseUp(target);

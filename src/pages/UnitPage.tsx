@@ -10,6 +10,8 @@ import type { useAcademy } from '../app/useAcademy';
 import { ArchitectureLab, ContextLab, PromptLab, SamplingLab } from '../components/Experiments';
 import { ApiDebugLab, RagFlowLab, StructuredOutputLab, ToolCallingLab } from '../components/ExperimentsBatch2';
 import { EmphasizedText, HighlightedParagraph } from '../components/StudyText';
+import { U01DeepCourse } from '../components/U01DeepCourse';
+import { u01MicroLessons } from '../data/u01MicroLessons';
 
 type FloatingAction = { mode: 'add' | 'remove' | 'invalid'; left: number; top: number; highlightId?: string };
 type SavedSelection = { unitId: string; passageId: string; quote: string; startOffset: number; endOffset: number; passageText: string; range: Range };
@@ -102,7 +104,7 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
         return;
       }
       const position = floatingPosition(range.getBoundingClientRect());
-      if (!startTarget || startTarget !== endTarget || !startTarget.closest('.lesson-section, .lesson-case')) {
+      if (!startTarget || startTarget !== endTarget || !startTarget.closest('.lesson-section, .lesson-case, .u01-micro-section')) {
         savedSelection.current = null;
         setFloating({ mode: 'invalid', ...position });
         return;
@@ -205,6 +207,7 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   const passageTexts = new Map<string, string>();
   lesson.sections.forEach((section, sectionIndex) => section.body.forEach((text, paragraphIndex) => passageTexts.set(id + ':section:' + sectionIndex + ':paragraph:' + paragraphIndex, text)));
   lesson.caseStudy.body.forEach((text, index) => passageTexts.set(id + ':case:' + index, text));
+  if (id === 'U01') u01MicroLessons.forEach(micro => micro.sections.forEach((section, sectionIndex) => section.paragraphs.forEach((text, paragraphIndex) => passageTexts.set('U01:micro:' + micro.id + ':s' + sectionIndex + ':p' + paragraphIndex, text))));
   const staleHighlights = highlights.filter(mark => {
     const currentText = passageTexts.get(mark.passageId);
     return currentText !== mark.passageText || currentText?.slice(mark.startOffset, mark.endOffset) !== mark.quote;
@@ -212,25 +215,7 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   const result = scoreQuiz(lesson.quiz, answers);
   const masteryLabels: Record<Exclude<MasteryStatus, 'verified'>, string> = { unassessed: '未评估', needs_review: '自评需要复习', understood: '自评基本理解' };
 
-  return <article className="lesson">
-    <Link className="back-link" to="/courses">← 课程地图</Link>
-    <header className="lesson-header">
-      <div className="eyebrow">{unit.moduleId} · {id} · 已发布</div>
-      <h1>{unit.title}</h1>
-      <p><EmphasizedText text={lesson.lead} emphasis={presentation.emphasis.lead}/></p>
-    </header>
-    <section className="highlight-info panel" aria-label="课程高亮">
-      <div><strong>课程划重点</strong><span>选中正文同一段中的文字，高亮工具会出现在选区旁。</span></div>
-      <span className="highlight-count">已保存 {highlights.length} 处</span>
-      {highlightLoadError && <p className="highlight-message error-text" role="alert">{highlightLoadError}，高亮状态未能加载。</p>}
-      {highlightMessage && !highlightLoadError && <p className="highlight-message" role="status">{highlightMessage}</p>}
-      {staleHighlights.length > 0 && <p className="highlight-message warning-text" role="status">{staleHighlights.length} 处高亮对应的正文已更新，已暂不显示；原记录仍保留，你可以在下方移除。</p>}
-      {highlights.length > 0 && <details className="highlight-list"><summary>查看已保存高亮</summary><ul>{highlights.map(mark => <li key={mark.id}><span>“{mark.quote.slice(0, 70)}{mark.quote.length > 70 ? '…' : ''}”{staleHighlights.some(item => item.id === mark.id) && <small>（正文版本已变化，未应用）</small>}</span><button className="text-button" onClick={() => void removeHighlight(mark.id)}>移除</button></li>)}</ul></details>}
-    </section>
-    <section className="panel">
-      <h2>学习目标</h2><ul>{lesson.goals.map((text, index) => <li key={text}><EmphasizedText text={text} emphasis={presentation.emphasis['goal' + index]}/></li>)}</ul>
-      <h3>前置知识</h3><ul>{lesson.prerequisites.map((text, index) => <li key={text}><EmphasizedText text={text} emphasis={presentation.emphasis['prerequisite' + index]}/></li>)}</ul>
-    </section>
+  const legacyCourse = <>
     {lesson.sections.map((section, sectionIndex) => <section className="panel lesson-section" key={section.title}>
       <div className="eyebrow">概念 {String(sectionIndex + 1).padStart(2, '0')}</div>
       <h2>{section.title}</h2>
@@ -256,6 +241,30 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
     </section>
     <section className="panel"><h2>常见误区</h2>{lesson.misconceptions.map(item => <div className="misconception" key={item.claim}><strong>误区：{item.claim}</strong><p>校正：{item.correction}</p></div>)}</section>
     <section className="panel"><h2>官方参考资料</h2><ul className="references">{lesson.references.map(reference => <li key={reference.url}><a href={reference.url} target="_blank" rel="noreferrer">{reference.title}</a> — {reference.topic}</li>)}</ul></section>
+  </>;
+
+
+  return <article className="lesson">
+    <Link className="back-link" to="/courses">← 课程地图</Link>
+    <header className="lesson-header">
+      <div className="eyebrow">{unit.moduleId} · {id} · 已发布</div>
+      <h1>{unit.title}</h1>
+      <p><EmphasizedText text={lesson.lead} emphasis={presentation.emphasis.lead}/></p>
+    </header>
+    <section className="highlight-info panel" aria-label="课程高亮">
+      <div><strong>课程划重点</strong><span>选中正文同一段中的文字，高亮工具会出现在选区旁。</span></div>
+      <span className="highlight-count">已保存 {highlights.length} 处</span>
+      {highlightLoadError && <p className="highlight-message error-text" role="alert">{highlightLoadError}，高亮状态未能加载。</p>}
+      {highlightMessage && !highlightLoadError && <p className="highlight-message" role="status">{highlightMessage}</p>}
+      {staleHighlights.length > 0 && <p className="highlight-message warning-text" role="status">{staleHighlights.length} 处高亮对应的正文已更新，已暂不显示；原记录仍保留，你可以在下方移除。</p>}
+      {highlights.length > 0 && <details className="highlight-list"><summary>查看已保存高亮</summary><ul>{highlights.map(mark => <li key={mark.id}><span>“{mark.quote.slice(0, 70)}{mark.quote.length > 70 ? '…' : ''}”{staleHighlights.some(item => item.id === mark.id) && <small>（正文版本已变化，未应用）</small>}</span><button className="text-button" onClick={() => void removeHighlight(mark.id)}>移除</button></li>)}</ul></details>}
+    </section>
+    <section className="panel">
+      <h2>学习目标</h2><ul>{lesson.goals.map((text, index) => <li key={text}><EmphasizedText text={text} emphasis={presentation.emphasis['goal' + index]}/></li>)}</ul>
+      <h3>前置知识</h3><ul>{lesson.prerequisites.map((text, index) => <li key={text}><EmphasizedText text={text} emphasis={presentation.emphasis['prerequisite' + index]}/></li>)}</ul>
+    </section>
+
+    {id === 'U01' ? <U01DeepCourse unitId={id} highlights={highlights} onHighlightClick={openRemoveToolbar} legacy={legacyCourse}/> : legacyCourse}
     <section className="panel">
       <h2>能力验收标准</h2><ul>{lesson.acceptance.map(item => <li key={item}>{item}</li>)}</ul><p>完成课程由你主动记录；掌握度由你自评。此页面没有正式能力验收机制，因此不会将状态设为“已通过验收”。</p>
       <div className="lesson-actions"><span>学习状态：{current?.learningStatus === 'completed' ? '已完成' : current?.learningStatus === 'in_progress' ? '学习中' : '未开始'}</span><button className="button secondary" onClick={() => void a.setStatus(id, 'in_progress')}>开始 / 继续学习</button><button className="button" onClick={() => void a.setStatus(id, 'completed')}>标记课程完成</button></div>
