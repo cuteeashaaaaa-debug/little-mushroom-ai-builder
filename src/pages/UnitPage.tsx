@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { allUnits } from '../data/courses';
 import { lessonPresentation } from '../data/lessonPresentation';
 import { lessons } from '../data/lessons';
@@ -24,6 +24,7 @@ function floatingPosition(rect: DOMRect) {
 
 export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const unit = allUnits.find(item => item.id === id);
   const lesson = lessons[id];
   const presentation = lessonPresentation[id];
@@ -32,8 +33,14 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   const [exerciseLoadedFor, setExerciseLoadedFor] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [scenarioAnswer, setScenarioAnswer] = useState('');
+  const [scenarioSubmitted, setScenarioSubmitted] = useState(false);
   const [rubric, setRubric] = useState<Record<string, number>>({});
-  const [saved, setSaved] = useState(false);
+  const [scenarioSaveState, setScenarioSaveState] = useState<'idle'|'dirty'|'saving'|'saved'|'error'>('idle');
+  const [scenarioSaveMessage, setScenarioSaveMessage] = useState('');
+  const [quizSaveState, setQuizSaveState] = useState<'idle'|'saving'|'saved'|'error'>('idle');
+  const [quizSaveMessage, setQuizSaveMessage] = useState('');
+  const [courseActionState, setCourseActionState] = useState<'idle'|'saving'|'error'|'saved'>('idle');
+  const [courseActionMessage, setCourseActionMessage] = useState('');
   const [highlights, setHighlights] = useState<TextHighlight[]>([]);
   const [highlightMessage, setHighlightMessage] = useState('');
   const [highlightLoadError, setHighlightLoadError] = useState('');
@@ -58,24 +65,36 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
         setAnswers(exercise.quizAnswers);
         setSubmitted(!!exercise.quizSubmitted);
         setScenarioAnswer(exercise.scenarioAnswer);
+        setScenarioSubmitted(!!exercise.scenarioSubmitted);
         setRubric(exercise.rubricScores);
       } else {
         setAnswers({});
         setSubmitted(false);
         setScenarioAnswer('');
+        setScenarioSubmitted(false);
         setRubric({});
       }
+      setScenarioSaveState('idle');
+      setScenarioSaveMessage('');
+      setQuizSaveState('idle');
+      setQuizSaveMessage('');
       setExerciseLoadedFor(id);
     }).catch(error => {
       if (!active) return;
       const message = error instanceof Error ? error.message : '本地学习记录读取失败。';
       setHighlightLoadError(message);
       setHighlightMessage(message);
-      setSaved(false);
+      setScenarioSaveState('error');
+      setScenarioSaveMessage(`读取练习记录失败：${message}`);
       setExerciseLoadedFor(id);
     });
     return () => { active = false; };
   }, [id, lesson]);
+
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [id]);
 
   useEffect(() => {
     const selectionChanged = (event?: Event) => {
@@ -158,9 +177,48 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
 
   const persist = async (extra: Partial<ExerciseRecord> = {}) => {
     const result = scoreQuiz(lesson.quiz, answers);
-    const record: ExerciseRecord = { unitId: id, quizAnswers: answers, quizSubmitted: submitted, quizScore: submitted ? result.percent : undefined, scenarioAnswer, rubricScores: rubric, updatedAt: new Date().toISOString(), ...extra };
-    try { await saveExercise(record); setSaved(true); }
-    catch { setSaved(false); }
+    const record: ExerciseRecord = { unitId: id, quizAnswers: answers, quizSubmitted: submitted, quizScore: submitted ? result.percent : undefined, scenarioAnswer, scenarioSubmitted, rubricScores: rubric, updatedAt: new Date().toISOString(), ...extra };
+    try { await saveExercise(record); return { ok: true as const }; }
+    catch (error) { return { ok: false as const, message: error instanceof Error ? error.message : '本机存储写入失败' }; }
+  };
+  const saveScenarioDraft = async () => {
+    setScenarioSaveState('saving');
+    setScenarioSaveMessage('');
+    const result = await persist({ scenarioSubmitted: false });
+    if (!result.ok) {
+      setScenarioSaveState('error');
+      setScenarioSaveMessage(`保存失败：${result.message}。请检查浏览器本地存储后重试。`);
+      return;
+    }
+    setScenarioSubmitted(false);
+    setScenarioSaveState('saved');
+    setScenarioSaveMessage('草稿已保存到本机。');
+  };
+  const submitScenario = async () => {
+    setScenarioSaveState('saving');
+    setScenarioSaveMessage('');
+    const result = await persist({ scenarioSubmitted: true });
+    if (!result.ok) {
+      setScenarioSaveState('error');
+      setScenarioSaveMessage(`提交失败：${result.message}。答案未提交，修复存储后可重试。`);
+      return;
+    }
+    setScenarioSubmitted(true);
+    setScenarioSaveState('saved');
+    setScenarioSaveMessage('作答已提交并保存到本机；系统不会自动判定自由文本是否正确。');
+  };
+  const submitQuiz = async () => {
+    setQuizSaveState('saving');
+    setQuizSaveMessage('');
+    setSubmitted(true);
+    const result = await persist({ quizSubmitted: true, quizScore: scoreQuiz(lesson.quiz, answers).percent });
+    if (!result.ok) {
+      setQuizSaveState('error');
+      setQuizSaveMessage(`判分结果未能保存：${result.message}。请重试。`);
+      return;
+    }
+    setQuizSaveState('saved');
+    setQuizSaveMessage('判分结果已保存到本机。');
   };
   const addSelectedHighlight = async () => {
     const snapshot = savedSelection.current;
@@ -217,6 +275,26 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   });
   const result = scoreQuiz(lesson.quiz, answers);
   const masteryLabels: Record<Exclude<MasteryStatus, 'verified'>, string> = { unassessed: '未评估', needs_review: '自评需要复习', understood: '自评基本理解' };
+  const unitIndex = allUnits.findIndex(item => item.id === id);
+  const nextUnit = unitIndex >= 0 ? allUnits[unitIndex + 1] : undefined;
+  const nextUnitAvailable = !!nextUnit && nextUnit.releaseStatus === 'published' && !!lessons[nextUnit.id];
+  const isCourseCompleted = current?.learningStatus === 'completed';
+  const markCourseCompleted = async (continueToNext = false) => {
+    setCourseActionState('saving');
+    setCourseActionMessage('');
+    try {
+      await a.setStatus(id, 'completed');
+      setCourseActionState('saved');
+      if (continueToNext && nextUnitAvailable && nextUnit) {
+        navigate(`/courses/${nextUnit.id}`);
+      } else {
+        setCourseActionMessage('本课已完成，学习掌握度没有自动更改。');
+      }
+    } catch (error) {
+      setCourseActionState('error');
+      setCourseActionMessage(`保存失败：${error instanceof Error ? error.message : '课程状态未能保存'}。请重试；课程尚未标记完成。`);
+    }
+  };
 
   const legacyCourse = <>
     {lesson.sections.map((section, sectionIndex) => <section className="panel lesson-section" key={section.title}>
@@ -234,13 +312,15 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
       <h2>知识理解题</h2><p>选择后提交判分；答题结果保存到本机 IndexedDB。阅读或答题不会自动把掌握度标记为通过。</p>
       {exerciseLoadedFor !== id && <p className="save-status" role="status">正在读取本机练习记录…</p>}
       {lesson.quiz.map((question, index) => <fieldset className="quiz-item" key={question.id}><legend>{index + 1}. {question.question}</legend>{question.choices.map((choice, choiceIndex) => <label className="choice" key={choice}><input type="radio" name={id + '-' + question.id} disabled={exerciseLoadedFor !== id} checked={answers[question.id] === choiceIndex} onChange={() => setAnswers(previous => ({ ...previous, [question.id]: choiceIndex }))}/>{choice}</label>)}{submitted && <div className={answers[question.id] === question.answer ? 'feedback success' : 'feedback warning'}>{answers[question.id] === question.answer ? '回答正确。' : '尚未答对。'}{question.explanation}</div>}</fieldset>)}
-      <button className="button" disabled={exerciseLoadedFor !== id} onClick={() => { setSubmitted(true); void persist({ quizSubmitted: true, quizScore: result.percent }); }}>提交并判分</button>{submitted && <strong className="quiz-result">得分 {result.correct}/{result.total}（{result.percent}%）</strong>}
+      <button className="button" disabled={exerciseLoadedFor !== id || quizSaveState === 'saving'} onClick={() => void submitQuiz()}>{quizSaveState === 'saving' ? '正在保存判分…' : '提交并判分'}</button>{submitted && <strong className="quiz-result">得分 {result.correct}/{result.total}（{result.percent}%）</strong>}{quizSaveMessage&&<p className={`save-status ${quizSaveState==='error'?'feedback warning':''}`} role="status">{quizSaveMessage}</p>}
     </section>
     <section className="panel">
-      <h2>业务场景练习与自评</h2><p>{lesson.scenario.prompt}</p><label className="field">你的作答<textarea rows={7} disabled={exerciseLoadedFor !== id} value={scenarioAnswer} onChange={event => setScenarioAnswer(event.target.value)} placeholder="写下你的方案、依据与边界处理。"/></label><button className="button" disabled={exerciseLoadedFor !== id} onClick={() => void persist()}>保存作答</button>
-      <h3>Rubric 自评（每项 0–2）</h3>{lesson.scenario.rubric.map(item => <label className="rubric-row" key={item.id}><span><b>{item.label}</b><small>{item.description}</small></span><select disabled={exerciseLoadedFor !== id} value={rubric[item.id] ?? 0} onChange={event => { const next = { ...rubric, [item.id]: +event.target.value }; setRubric(next); void persist({ rubricScores: next }); }}><option value={0}>0 · 尚未体现</option><option value={1}>1 · 部分体现</option><option value={2}>2 · 充分体现</option></select></label>)}
-      <details><summary>查看参考答案与常见错误</summary><h4>参考答案</h4><p>{lesson.scenario.reference}</p><h4>常见错误</h4><ul>{lesson.scenario.commonErrors.map(item => <li key={item}>{item}</li>)}</ul></details>
-      <p className="save-status" role="status">{saved ? '练习记录已保存在本机。' : '修改后请保存作答；数据仅保存在本机。'}</p>
+      <h2>业务场景练习与自评</h2><p>{lesson.scenario.prompt}</p><label className="field">你的作答<textarea rows={7} disabled={exerciseLoadedFor !== id} value={scenarioAnswer} onChange={event => {setScenarioAnswer(event.target.value);setScenarioSubmitted(false);setScenarioSaveState('dirty');setScenarioSaveMessage('有未保存的修改。')}} placeholder="写下你的方案、依据与边界处理。"/></label>
+      <div className="exercise-actions"><button className="button secondary" disabled={exerciseLoadedFor !== id || scenarioSaveState === 'saving'} onClick={() => void saveScenarioDraft()}>{scenarioSaveState === 'saving' ? '保存中…' : '保存草稿'}</button><button className="button" disabled={exerciseLoadedFor !== id || scenarioSaveState === 'saving'} onClick={() => void submitScenario()}>{scenarioSaveState === 'saving' ? '提交中…' : scenarioSubmitted ? '重新提交并查看解析' : '提交作答并查看解析'}</button></div>
+      {scenarioSaveMessage&&<p className={`save-status ${scenarioSaveState==='error'?'feedback warning':''}`} role="status">{scenarioSaveMessage}</p>}
+      {scenarioSubmitted&&<p className="feedback success" role="status">本练习已提交。自由文本没有被自动判定为通过，请根据参考答案和评分维度自评。</p>}
+      <h3>Rubric 自评（每项 0–2）</h3><p>0 表示答案没有体现该能力，1 表示部分体现，2 表示说明清楚且有依据。分数是你的自评，不是系统语义评分或能力验收。</p>{lesson.scenario.rubric.map(item => <label className="rubric-row" key={item.id}><span><b>{item.label}</b><small>{item.description}</small></span><select disabled={exerciseLoadedFor !== id} value={rubric[item.id] ?? 0} onChange={event => { const next = { ...rubric, [item.id]: +event.target.value }; setRubric(next); setScenarioSaveState('dirty'); setScenarioSaveMessage('评分有未保存的修改。'); }}><option value={0}>0 · 尚未体现</option><option value={1}>1 · 部分体现</option><option value={2}>2 · 充分体现</option></select></label>)}
+      {scenarioSubmitted&&<div className="scenario-answer-key"><h4>参考答案</h4><p>{lesson.scenario.reference}</p><h4>常见错误</h4><ul>{lesson.scenario.commonErrors.map(item => <li key={item}>{item}</li>)}</ul></div>}
     </section>
     <section className="panel"><h2>常见误区</h2>{lesson.misconceptions.map(item => <div className="misconception" key={item.claim}><strong>误区：{item.claim}</strong><p>校正：{item.correction}</p></div>)}</section>
     <section className="panel"><h2>官方参考资料</h2><ul className="references">{lesson.references.map(reference => <li key={reference.url}><a href={reference.url} target="_blank" rel="noreferrer">{reference.title}</a> — {reference.topic}</li>)}</ul></section>
@@ -268,12 +348,16 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
     </section>
 
     {id === 'U01' ? <U01DeepCourse unitId={id} highlights={highlights} onHighlightClick={openRemoveToolbar} legacy={legacyCourse}/> : legacyCourse}
-    <section className="panel">
-      <h2>能力验收标准</h2><ul>{lesson.acceptance.map(item => <li key={item}>{item}</li>)}</ul><p>完成课程由你主动记录；掌握度由你自评。此页面没有正式能力验收机制，因此不会将状态设为“已通过验收”。</p>
-      <div className="lesson-actions"><span>学习状态：{current?.learningStatus === 'completed' ? '已完成' : current?.learningStatus === 'in_progress' ? '学习中' : '未开始'}</span><button className="button secondary" onClick={() => void a.setStatus(id, 'in_progress')}>开始 / 继续学习</button><button className="button" onClick={() => void a.setStatus(id, 'completed')}>标记课程完成</button></div>
+    <section className="panel lesson-flow">
+      <h2>下一步学习</h2>
+      {nextUnitAvailable&&nextUnit?<Link className="button next-lesson-link" to={`/courses/${nextUnit.id}`}>学习下一节：{nextUnit.id} · {nextUnit.title} →</Link>:nextUnit?<p className="planned-next">{nextUnit.id} 尚未发布；你可以复习本课或返回课程地图。</p>:<p className="planned-next">这已经是当前课程地图的最后一节。</p>}
+      <div className="lesson-completion"><div><strong>本课状态：{isCourseCompleted?'已完成':current?.learningStatus==='in_progress'?'学习中':'未开始'}</strong>{isCourseCompleted&&<span>已记录完成。再次打开本课不会重置状态。</span>}</div>{!isCourseCompleted&&<div className="exercise-actions"><button className="button secondary" disabled={!a.ready||courseActionState==='saving'} onClick={()=>void markCourseCompleted(false)}>{courseActionState==='saving'?'保存中…':'标记本课完成'}</button>{nextUnitAvailable&&nextUnit&&<button className="button" disabled={!a.ready||courseActionState==='saving'} onClick={()=>void markCourseCompleted(true)}>{courseActionState==='saving'?'保存并跳转…':`完成本课并学习下一节：${nextUnit.id}`}</button>}</div>}</div>
+      {courseActionMessage&&<p className={`save-status ${courseActionState==='error'?'feedback warning':''}`} role="status">{courseActionMessage}</p>}
+      <div className="lesson-flow-secondary"><Link className="button secondary" to="/courses">返回课程地图</Link><Link className="text-link" to="/">返回首页复习入口</Link></div>
       <label className="field">知识掌握自评<select value={current?.masteryStatus === 'needs_review' ? 'needs_review' : current?.masteryStatus === 'understood' ? 'understood' : 'unassessed'} onChange={event => void a.setMastery(id, event.target.value as Exclude<MasteryStatus, 'verified'>)}>{Object.entries(masteryLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>
-      <p>学习状态与掌握度分开保存；“已通过验收”需要未来正式能力评测证据，不能通过阅读或自评获得。</p>
+      <p>掌握度与课程完成状态分开保存；这里不会自动判为“已通过验收”。</p>
     </section>
+    <section className="panel"><h2>能力验收标准</h2><ul>{lesson.acceptance.map(item => <li key={item}>{item}</li>)}</ul><p>此页面没有正式能力验收机制；“已通过验收”必须由未来的正式能力评测证据支持。</p></section>
     {floating && <div className="selection-popover" role={floating.mode === 'invalid' ? 'status' : 'toolbar'} aria-label="文本高亮操作" style={{ left: floating.left, top: floating.top }} onPointerEnter={() => { toolbarPointerActive.current = true; }} onPointerLeave={() => { toolbarPointerActive.current = false; }} onPointerDown={event => { toolbarPointerActive.current = true; event.preventDefault(); }} onMouseDown={event => event.preventDefault()} onClick={event => event.stopPropagation()}>{floating.mode === 'invalid' ? <span>请在同一段落中选择文字</span> : <button onClick={() => { void (async () => { if (floating.mode === 'add') await addSelectedHighlight(); else await removeHighlight(floating.highlightId ?? ''); toolbarPointerActive.current = false; })(); }}>{floating.mode === 'add' ? '高亮' : '取消高亮'}</button>}</div>}
   </article>;
 }
