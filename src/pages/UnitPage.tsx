@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { allUnits } from '../data/courses';
 import { lessonPresentation } from '../data/lessonPresentation';
@@ -12,6 +12,7 @@ import { ApiDebugLab, RagFlowLab, StructuredOutputLab, ToolCallingLab } from '..
 import { EmphasizedText, HighlightedParagraph } from '../components/StudyText';
 
 type FloatingAction = { mode: 'add' | 'remove' | 'invalid'; left: number; top: number; highlightId?: string };
+type SavedSelection = { unitId: string; passageId: string; quote: string; startOffset: number; endOffset: number; passageText: string; range: Range };
 function floatingPosition(rect: DOMRect) {
   const width = 132;
   const left = Math.max(8, Math.min(window.innerWidth - width - 8, (rect.left + rect.right) / 2 - width / 2));
@@ -35,8 +36,13 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   const [highlightMessage, setHighlightMessage] = useState('');
   const [highlightLoadError, setHighlightLoadError] = useState('');
   const [floating, setFloating] = useState<FloatingAction | null>(null);
+  const savedSelection = useRef<SavedSelection | null>(null);
+  const toolbarPointerActive = useRef(false);
 
   useEffect(() => {
+    savedSelection.current = null;
+    toolbarPointerActive.current = false;
+    setFloating(null);
     if (!lesson) return;
     let active = true;
     setExerciseLoadedFor('');
@@ -70,9 +76,12 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
   }, [id, lesson]);
 
   useEffect(() => {
-    const selectionChanged = () => {
+    const selectionChanged = (event?: Event) => {
+      const eventTarget = event?.target instanceof Element ? event.target : null;
+      if (eventTarget?.closest('.selection-popover') || toolbarPointerActive.current) return;
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        savedSelection.current = null;
         setFloating(null);
         return;
       }
@@ -85,22 +94,43 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
         setFloating(null);
         return;
       }
-      const startTarget = startElement?.closest('[data-highlight-target]');
-      const endTarget = endElement?.closest('[data-highlight-target]');
+      const startTarget = startElement?.closest<HTMLElement>('[data-highlight-target]');
+      const endTarget = endElement?.closest<HTMLElement>('[data-highlight-target]');
       if (!startTarget && !endTarget) {
+        savedSelection.current = null;
         setFloating(null);
         return;
       }
       const position = floatingPosition(range.getBoundingClientRect());
       if (!startTarget || startTarget !== endTarget || !startTarget.closest('.lesson-section, .lesson-case')) {
+        savedSelection.current = null;
         setFloating({ mode: 'invalid', ...position });
         return;
       }
+      const passageText = startTarget.textContent ?? '';
+      const startRange = document.createRange();
+      startRange.selectNodeContents(startTarget);
+      startRange.setEnd(range.startContainer, range.startOffset);
+      const endRange = document.createRange();
+      endRange.selectNodeContents(startTarget);
+      endRange.setEnd(range.endContainer, range.endOffset);
+      const quote = range.toString();
+      savedSelection.current = {
+        unitId: id,
+        passageId: startTarget.dataset.highlightTarget ?? '',
+        quote,
+        startOffset: startRange.toString().length,
+        endOffset: endRange.toString().length,
+        passageText,
+        range: range.cloneRange(),
+      };
       setFloating({ mode: 'add', ...position });
     };
     const clickedOutside = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('.selection-popover, .study-highlight')) return;
+      toolbarPointerActive.current = false;
+      savedSelection.current = null;
       setFloating(null);
       window.getSelection()?.removeAllRanges();
     };
@@ -128,35 +158,18 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
     catch { setSaved(false); }
   };
   const addSelectedHighlight = async () => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) { setHighlightMessage('请先选中一段课程正文。'); return; }
-    const range = selection.getRangeAt(0);
-    const elementFor = (node: Node): Element | null => node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
-    const startTarget = elementFor(range.startContainer)?.closest<HTMLElement>('[data-highlight-target]');
-    const endTarget = elementFor(range.endContainer)?.closest<HTMLElement>('[data-highlight-target]');
-    if (!startTarget || startTarget !== endTarget || !startTarget.closest('.lesson-section, .lesson-case')) {
-      setHighlightMessage('请在同一个概念或案例段落中选择文字。');
-      return;
-    }
-    const quote = range.toString();
+    const snapshot = savedSelection.current;
+    if (!snapshot || snapshot.unitId !== id) { setHighlightMessage('选区已失效，请重新选中课程正文后再试。'); return; }
+    const { quote, passageText, startOffset, endOffset, passageId } = snapshot;
     if (!quote.trim()) { setHighlightMessage('没有检测到可标记的文字。'); return; }
-    const passageText = startTarget.textContent ?? '';
-    const startRange = document.createRange();
-    startRange.selectNodeContents(startTarget);
-    startRange.setEnd(range.startContainer, range.startOffset);
-    const endRange = document.createRange();
-    endRange.selectNodeContents(startTarget);
-    endRange.setEnd(range.endContainer, range.endOffset);
-    const startOffset = startRange.toString().length;
-    const endOffset = endRange.toString().length;
-    const passageId = startTarget.dataset.highlightTarget ?? '';
+    if (snapshot.range.toString() !== quote) { savedSelection.current = null; setHighlightMessage('选中文本已经变化，请重新选择后再试。'); return; }
     if (highlights.some(mark => mark.passageId === passageId && mark.passageText === passageText && startOffset < mark.endOffset && endOffset > mark.startOffset)) {
       setHighlightMessage('这段文字与已有高亮重叠；请选取未标记的内容。');
       return;
     }
     const record: TextHighlight = {
       id: globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + '-' + Math.random().toString(36).slice(2),
-      unitId: id,
+      unitId: snapshot.unitId,
       passageId,
       quote,
       passageText,
@@ -168,8 +181,9 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
       await saveHighlight(record);
       setHighlights(previous => [...previous, record]);
       setHighlightMessage('高亮已保存在本机。');
+      savedSelection.current = null;
       setFloating(null);
-      selection.removeAllRanges();
+      window.getSelection()?.removeAllRanges();
     } catch (error) {
       setHighlightMessage(error instanceof Error ? error.message : '高亮保存失败，请检查本机存储后重试。');
     }
@@ -248,6 +262,6 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
       <label className="field">知识掌握自评<select value={current?.masteryStatus === 'needs_review' ? 'needs_review' : current?.masteryStatus === 'understood' ? 'understood' : 'unassessed'} onChange={event => void a.setMastery(id, event.target.value as Exclude<MasteryStatus, 'verified'>)}>{Object.entries(masteryLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>
       <p>学习状态与掌握度分开保存；“已通过验收”需要未来正式能力评测证据，不能通过阅读或自评获得。</p>
     </section>
-    {floating && <div className="selection-popover" role={floating.mode === 'invalid' ? 'status' : 'toolbar'} aria-label="文本高亮操作" style={{ left: floating.left, top: floating.top }} onMouseDown={event => event.preventDefault()} onClick={event => event.stopPropagation()}>{floating.mode === 'invalid' ? <span>请在同一段落中选择文字</span> : <button onClick={() => floating.mode === 'add' ? void addSelectedHighlight() : void removeHighlight(floating.highlightId ?? '')}>{floating.mode === 'add' ? '高亮' : '取消高亮'}</button>}</div>}
+    {floating && <div className="selection-popover" role={floating.mode === 'invalid' ? 'status' : 'toolbar'} aria-label="文本高亮操作" style={{ left: floating.left, top: floating.top }} onPointerEnter={() => { toolbarPointerActive.current = true; }} onPointerLeave={() => { toolbarPointerActive.current = false; }} onPointerDown={event => { toolbarPointerActive.current = true; event.preventDefault(); }} onMouseDown={event => event.preventDefault()} onClick={event => event.stopPropagation()}>{floating.mode === 'invalid' ? <span>请在同一段落中选择文字</span> : <button onClick={() => { void (async () => { if (floating.mode === 'add') await addSelectedHighlight(); else await removeHighlight(floating.highlightId ?? ''); toolbarPointerActive.current = false; })(); }}>{floating.mode === 'add' ? '高亮' : '取消高亮'}</button>}</div>}
   </article>;
 }
