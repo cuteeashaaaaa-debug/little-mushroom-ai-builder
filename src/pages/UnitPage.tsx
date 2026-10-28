@@ -8,6 +8,7 @@ import { scoreQuiz } from '../domain/learning';
 import type { ExerciseRecord, MasteryStatus, TextHighlight } from '../domain/types';
 import type { useAcademy } from '../app/useAcademy';
 import { ArchitectureLab, ContextLab, PromptLab, SamplingLab } from '../components/Experiments';
+import { ApiDebugLab, RagFlowLab, StructuredOutputLab, ToolCallingLab } from '../components/ExperimentsBatch2';
 import { EmphasizedText, HighlightedParagraph } from '../components/StudyText';
 
 type FloatingAction = { mode: 'add' | 'remove' | 'invalid'; left: number; top: number; highlightId?: string };
@@ -226,7 +227,7 @@ export function UnitPage({ a }: { a: ReturnType<typeof useAcademy> }) {
     </section>)}
     <section className="panel lesson-case"><div className="eyebrow">产品案例</div><h2>{lesson.caseStudy.title}</h2>{lesson.caseStudy.body.map((text, index) => <HighlightedParagraph key={index} passageId={id + ':case:' + index} text={text} highlights={highlights} emphasis={presentation.emphasis['case' + index]} onHighlightClick={openRemoveToolbar}/>)}</section>
     <section className="panel"><h2>AI 产品经理视角</h2><ul>{lesson.pm.map((text, index) => <li key={text}><EmphasizedText text={text} emphasis={presentation.emphasis['pm' + index]}/></li>)}</ul><h2>FDE / AI 应用工程视角</h2><ul>{lesson.engineering.map((text, index) => <li key={text}><EmphasizedText text={text} emphasis={presentation.emphasis['eng' + index]}/></li>)}</ul></section>
-    <section className="panel experiment"><div className="eyebrow">可重复实验 · 本地运行</div><h2>{id === 'U01' ? 'AI 应用架构搭建器' : id === 'U02' ? 'Token 与上下文预算模拟器' : id === 'U03' ? 'Prompt 版本对比实验室' : '采样参数可视化'}</h2>{id === 'U01' ? <ArchitectureLab/> : id === 'U02' ? <ContextLab/> : id === 'U03' ? <PromptLab/> : <SamplingLab/>}</section>
+    <section className="panel experiment"><div className="eyebrow">可重复实验 · 本地运行</div><h2>{id === 'U01' ? 'AI 应用架构搭建器' : id === 'U02' ? 'Token 与上下文预算模拟器' : id === 'U03' ? 'Prompt 版本对比实验室' : id === 'U04' ? '采样参数可视化' : id === 'U05' ? '结构化输出验证器' : id === 'U06' ? '模拟 API 调试台' : id === 'U07' ? '工具调用模拟器' : 'RAG 流程可视化'}</h2>{id === 'U01' ? <ArchitectureLab/> : id === 'U02' ? <ContextLab/> : id === 'U03' ? <PromptLab/> : id === 'U04' ? <SamplingLab/> : id === 'U05' ? <StructuredOutputLab/> : id === 'U06' ? <ApiDebugLab/> : id === 'U07' ? <ToolCallingLab/> : <RagFlowLab/>}</section>
     <section className="panel">
       <h2>知识理解题</h2><p>选择后提交判分；答题结果保存到本机 IndexedDB。阅读或答题不会自动把掌握度标记为通过。</p>
       {exerciseLoadedFor !== id && <p className="save-status" role="status">正在读取本机练习记录…</p>}

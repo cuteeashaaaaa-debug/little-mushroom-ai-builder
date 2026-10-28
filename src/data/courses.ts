@@ -1,13 +1,55 @@
-import type { ModuleMeta } from '../domain/types';
-const modules: [string,string,string[]][] = [
-['M01','AI 产品与基础认知',['AI时代与职业转型','生成式AI基础原理','大语言模型能力边界','AI产品经理的职责与能力','从问题发现到AI机会识别','AI产品需求分析']],
-['M02','AI 产品设计与评估',['AI产品体验设计原则','提示词与上下文设计','AI功能评估指标','模型选择与成本权衡','AI产品原型与验证','安全、隐私与责任设计']],
-['M03','AI 技术与解决方案',['检索增强生成 RAG','Embedding 与向量检索','工具调用与工作流','Agent 架构与适用边界','数据准备与知识库方案','AI解决方案架构']],
-['M04','AI 应用工程实践',['Python与API应用基础','构建第一个AI应用','前端集成与流式交互','应用评测与调试','部署、监控与迭代','可靠性与生产化实践']],
-['M05','FDE 与综合实战',['客户现场问题拆解','快速交付与技术沟通','端到端解决方案实战','作品集与职业发展']]
+import type { ModuleMeta, ReleaseStatus, UnitMeta } from '../domain/types';
+
+type UnitSeed = [id: string, title: string, objectives: string[], prerequisites?: string[]];
+type ModuleSeed = [id: string, title: string, description: string, units: UnitSeed[]];
+
+const seeds: ModuleSeed[] = [
+  ['M01', 'LLM 基础与 API', '从生成模型原理走到可靠的 API 与工具接口。', [
+    ['U01', 'LLM 基础与 AI 应用架构', ['解释 LLM 的预测式生成原理及边界', '区分模型、应用系统与确定性业务程序的职责', '绘制包含数据、工具和验证层的 AI 应用架构']],
+    ['U02', 'Token 与上下文窗口', ['区分 Token 与字符/词语并说明估算限制', '估算并分配上下文窗口预算', '解释分词、截断与 Prompt Caching 的适用边界'], ['U01：模型与应用系统的区别']],
+    ['U03', 'Prompt 设计与版本对比', ['使用目标、背景、约束、示例与格式编写 Prompt', '比较 Prompt 版本并提出有证据的改进', '识别 Prompt Injection 与模型能力边界'], ['U01：模型输出边界']],
+    ['U04', '生成参数与输出控制', ['解释 Temperature、Top-p 与最大输出长度', '比较随机性、稳定性和输出控制效果', '为不同业务风险设计可复现实验方案'], ['U01：模型与业务规则的职责边界']],
+    ['U05', '结构化输出与 JSON Schema', ['区分 JSON 语法、Schema 结构约束与业务规则验证', '设计含 required、enum 和类型约束的简单 Schema', '分析结构化输出的价值、拒答与内容准确性边界'], ['U01：程序验证与模型生成的职责边界']],
+    ['U06', '模型 API、流式输出与错误处理', ['读懂 HTTP API 请求和 JSON 响应的组成', '解释 SSE 流式返回、超时、取消与限流处理', '设计不泄密且避免重复副作用的恢复流程'], ['U01：HTTP 与 JSON 基础；U05：结构验证']],
+    ['U07', 'Function Calling 与模型选型', ['解释模型提出工具调用到程序执行的完整生命周期', '在执行前验证参数、权限、超时与工具结果', '用明确业务指标设计公平的模型选型比较'], ['U05：结构化参数；U06：API 请求与错误处理']],
+  ]],
+  ['M02', 'RAG 知识库', '把外部文档转成有来源、可检索、可验证的回答依据。', [
+    ['U08', 'RAG 原理与完整链路', ['绘制文档导入、解析、切分、检索到带引用回答的完整链路', '区分模型参数知识、长上下文和 RAG 的作用', '区分检索失败、生成失败与证据不足并设计无答案路径'], ['U01：模型与应用系统；U02：上下文预算；U07：工具边界']],
+    ['U09', '文档解析与 Chunking', ['比较文档解析、版面提取与分块策略', '设计保留语义边界和来源元数据的 Chunk', '评估分块对召回、引用和成本的影响'], ['U08：RAG 全链路']],
+    ['U10', 'Embedding、向量检索与 Top-K', ['解释 Embedding 向量表示及其语义相似性用途', '理解向量索引与 Top-K 候选片段', '分析阈值、召回率和检索噪声'], ['U08：检索与上下文构建']],
+    ['U11', '混合检索与 Reranking', ['比较关键词检索与向量检索的互补性', '解释候选合并和 Reranking 的作用', '设计可评测的混合检索方案'], ['U09：Chunking；U10：向量检索']],
+    ['U12', '引用、无答案处理与幻觉控制', ['设计可追溯的来源引用与证据展示', '判断证据不足并安全拒答或澄清', '评测引用支持度及生成幻觉风险'], ['U08：完整 RAG 链路；U10：检索候选']],
+  ]],
+  ['M03', 'Agent 与工作流', '把模型建议、安全工具和可恢复状态编排成可观察的业务流程。', [
+    ['U13', 'Workflow 与 Agent', ['区分固定工作流与模型驱动 Agent', '按任务不确定性和风险选择编排方式', '明确停止条件与人工接管点'], ['U07：Function Calling']],
+    ['U14', '工具调用与工具契约', ['定义工具输入输出契约及失败语义', '验证参数、权限、超时和副作用', '设计工具结果回传与审计信息'], ['U07：工具调用生命周期']],
+    ['U15', '任务分解与状态管理', ['拆分可验证的子任务及依赖关系', '持久化任务状态并支持恢复', '控制循环、上下文和状态一致性'], ['U13：工作流与 Agent']],
+    ['U16', '异常、重试、人工确认与权限', ['设计带上限、可判定的重试策略', '在高风险动作前要求确认并执行权限校验', '处理部分失败、重复执行与恢复'], ['U06：错误处理；U14：工具契约']],
+    ['U17', '多 Agent 与自动化成本', ['评估多 Agent 是否带来可衡量收益', '估算协作带来的 Token、延迟和协调成本', '用单 Agent/工作流基线验证复杂度价值'], ['U13：Agent 适用边界']],
+  ]],
+  ['M04', 'AI 产品评测', '以数据、业务目标和风险门槛验证模型与系统是否适合上线。', [
+    ['U18', '指标体系与 Golden Dataset', ['把用户价值拆解为可测量质量与风险指标', '构建代表性、可追溯的黄金测试集', '防止数据泄漏和只对样例过拟合'], ['U03：Prompt 版本；U08：RAG 链路']],
+    ['U19', '检索质量评测', ['区分检索相关性、召回与排序质量', '设计查询与相关文档标注集', '分析漏召回和无关召回对下游回答的影响'], ['U10：Embedding 与 Top-K']],
+    ['U20', '引用正确性、Groundedness 与幻觉', ['验证引用是否支持对应主张', '区分有依据回答、无依据推断和正确拒答', '建立分层人工审阅与风险抽样'], ['U12：引用与无答案处理']],
+    ['U21', '人工评测与自动评测', ['设计清晰、可复用的评测 Rubric', '理解自动评测器的偏差和适用范围', '组合人工抽检、离线评测与线上反馈'], ['U18：指标与测试集']],
+    ['U22', '成本、延迟、回归测试与发布门禁', ['监控每任务成本和端到端延迟分布', '设置跨 Prompt、检索和模型的回归测试', '制定可执行的发布门禁与回滚条件'], ['U06：请求成本与延迟；U18：Golden Dataset']],
+  ]],
+  ['M05', '企业 AI 产品设计', '从业务发现走到安全、可推广、可验收的企业 AI 交付。', [
+    ['U23', '需求调研与业务流程', ['用访谈和流程观察定位真实问题', '绘制现状流程、角色与异常路径', '区分用户诉求、根因和解决方案假设'], ['U01：AI 应用组成']],
+    ['U24', 'AI 场景价值与可行性评估', ['评估业务价值、数据可得性和模型适配度', '比较自动化、增强和非 AI 方案', '量化不确定性、风险和验证成本'], ['U18：指标体系']],
+    ['U25', 'MVP、降级方案与人机协作', ['界定可验证 MVP 范围与成功门槛', '设计模型不可用时的降级体验', '按风险分配模型、程序和人工职责'], ['U06：故障恢复；U16：人工确认']],
+    ['U26', '企业账号、角色与知识权限', ['区分认证、角色授权与资源级权限', '将文档访问范围贯穿检索与回答', '验证越权、撤权和审计路径'], ['U07：权限校验；U08：RAG 引用']],
+    ['U27', '数据安全、审计、成本配额与需求优先级', ['识别敏感数据流与最小化原则', '制定审计、配额和异常使用监控', '用价值、风险和成本排序需求'], ['U16：权限与审计；U22：成本门禁']],
+    ['U28', 'PRD、上线推广与最终验收', ['编写含指标、边界和回滚条件的 PRD', '规划试点、培训、反馈和推广节奏', '按验收证据决定上线、迭代或停止'], ['U23：流程调研；U22：发布门禁']],
+  ]],
 ];
-const firstObjectives:Record<string,string[]>={U01:['解释 LLM 的预测式生成原理及边界','区分模型、应用系统与确定性业务程序的职责','绘制包含数据、工具和验证层的 AI 应用架构'],U02:['区分 Token 与字符/词语并说明估算限制','估算并分配上下文窗口预算','解释分词、截断与 Prompt Caching 的适用边界'],U03:['使用目标、背景、约束、示例与格式编写 Prompt','比较 Prompt 版本并提出有证据的改进','识别 Prompt Injection 与模型能力边界'],U04:['解释 Temperature、Top-p 与最大输出长度','比较随机性、稳定性和输出控制效果','为不同业务风险设计可复现实验方案']};
-const firstTitles:Record<string,string>={U01:'LLM 基础与 AI 应用架构',U02:'Token 与上下文窗口',U03:'Prompt 设计与版本对比',U04:'生成参数与输出控制'};
-export const courseModules: ModuleMeta[] = modules.map(([id,title,units])=>({id,title,description:'建立可迁移的 AI Builder 实践能力。',units:units.map((name,i)=>{const n=String((+id.slice(1)-1)*6+i+1).padStart(2,'0'),unitId=`U${n}`;return {id:unitId,moduleId:id,title:firstTitles[unitId]??name,objectives:firstObjectives[unitId]??['理解核心概念并能结合实际业务进行判断'],prerequisites:unitId==='U01'?['无需编程基础；了解表格或 BI 查询场景即可']:unitId==='U02'?['U01：模型与应用系统的区别']:unitId==='U03'?['U01：模型输出边界']:unitId==='U04'?['U01：模型与业务规则的职责边界']:[],releaseStatus:'planned' as const}})}));
-export const allUnits = courseModules.flatMap(m=>m.units);
-for(const unit of allUnits){if(['U01','U02','U03','U04'].includes(unit.id))unit.releaseStatus='published'}
+
+const published = new Set(['U01', 'U02', 'U03', 'U04', 'U05', 'U06', 'U07', 'U08']);
+export const courseModules: ModuleMeta[] = seeds.map(([id, title, description, units]) => ({
+  id, title, description,
+  units: units.map(([unitId, unitTitle, objectives, prerequisites = []]): UnitMeta => ({
+    id: unitId, moduleId: id, title: unitTitle, objectives, prerequisites,
+    releaseStatus: (published.has(unitId) ? 'published' : 'planned') as ReleaseStatus,
+  })),
+}));
+export const allUnits = courseModules.flatMap(module => module.units);
